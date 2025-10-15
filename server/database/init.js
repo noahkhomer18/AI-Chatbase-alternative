@@ -74,6 +74,50 @@ const initDatabase = () => {
           FOREIGN KEY (conversation_id) REFERENCES conversations (id),
           FOREIGN KEY (document_id) REFERENCES documents (id)
         )
+      `);
+
+      // Training datasets table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS training_datasets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          status TEXT DEFAULT 'processing',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+      `);
+
+      // Training data table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS training_data (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          dataset_id INTEGER NOT NULL,
+          filename TEXT NOT NULL,
+          file_type TEXT NOT NULL,
+          content TEXT NOT NULL,
+          file_size INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (dataset_id) REFERENCES training_datasets (id)
+        )
+      `);
+
+      // Trained models table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS trained_models (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          dataset_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          status TEXT DEFAULT 'training',
+          parameters TEXT,
+          model_path TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          completed_at DATETIME,
+          FOREIGN KEY (user_id) REFERENCES users (id),
+          FOREIGN KEY (dataset_id) REFERENCES training_datasets (id)
+        )
       `, (err) => {
         if (err) {
           reject(err);

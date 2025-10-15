@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Register from './components/Register';
 import ChatInterface from './components/ChatInterface';
 import DocumentManager from './components/DocumentManager';
+import ModelTraining from './components/ModelTraining';
 import Sidebar from './components/Sidebar';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -70,6 +71,7 @@ function AppContent() {
           />
         )}
         {currentView === 'documents' && <DocumentManager />}
+        {currentView === 'training' && <ModelTraining />}
       </MainContent>
     </AppContainer>
   );

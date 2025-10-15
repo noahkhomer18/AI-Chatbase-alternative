@@ -6,6 +6,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const chatRoutes = require('./routes/chat');
 const documentRoutes = require('./routes/documents');
+const trainingRoutes = require('./routes/training');
 const { initDatabase } = require('./database/init');
 
 const app = express();
@@ -23,6 +24,7 @@ initDatabase();
 app.use('/api/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/training', trainingRoutes);
 
 // Serve static files from React build
 if (process.env.NODE_ENV === 'production') {

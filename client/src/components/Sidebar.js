@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { MessageCircle, FileText, Plus, LogOut, User } from 'lucide-react';
+import { MessageCircle, FileText, Brain, Plus, LogOut, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 
@@ -230,6 +230,13 @@ function Sidebar({ currentView, setCurrentView, selectedConversation, setSelecte
         >
           <FileText size={20} />
           Documents
+        </NavButton>
+        <NavButton 
+          active={currentView === 'training'} 
+          onClick={() => setCurrentView('training')}
+        >
+          <Brain size={20} />
+          Model Training
         </NavButton>
       </Navigation>
 
