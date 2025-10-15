@@ -1,0 +1,19 @@
+{
+  "name": "ai-chatbase-alternative",
+  "version": "1.0.0",
+  "description": "An AI-powered chatbase alternative with document upload and chat functionality",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "install-all": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "keywords": ["ai", "chat", "chatbase", "alternative", "openai"],
+  "author": "Noah Homer",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
