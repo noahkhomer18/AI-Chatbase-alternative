@@ -283,3 +283,4 @@ router.delete('/models/:id', verifyToken, (req, res) => {
 });
 
 module.exports = router;
+

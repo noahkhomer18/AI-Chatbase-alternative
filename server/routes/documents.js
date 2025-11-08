@@ -180,3 +180,4 @@ router.get('/search/:query', verifyToken, (req, res) => {
 });
 
 module.exports = router;
+

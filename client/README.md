@@ -70,3 +70,4 @@ The application uses Styled Components for CSS-in-JS styling with a modern, clea
 - React Context for global state
 - Local state for component-specific data
 - Axios for API communication
+

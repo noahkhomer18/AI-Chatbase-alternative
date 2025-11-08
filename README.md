@@ -170,3 +170,4 @@ For issues and questions, please open an issue on GitHub.
 ---
 
 Built with ❤️ as an open-source alternative to Chatbase.
+
