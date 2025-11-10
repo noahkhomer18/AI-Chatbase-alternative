@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { db } = require('../database/init');
 const { verifyToken } = require('./auth');
+const { scrapeUrls, isValidUrl } = require('../utils/webScraper');
 
 const router = express.Router();
 
@@ -79,8 +80,8 @@ router.post('/create-dataset', verifyToken, upload.array('trainingFiles', 10), a
 
           // Store training data
           db.run(
-            `INSERT INTO training_data (dataset_id, filename, file_type, content, file_size, created_at) 
-             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+            `INSERT INTO training_data (dataset_id, filename, file_type, content, file_size, source_type, created_at) 
+             VALUES (?, ?, ?, ?, ?, 'file', CURRENT_TIMESTAMP)`,
             [datasetId, file.originalname, fileType, content, file.size],
             function(err) {
               if (err) {
@@ -109,6 +110,144 @@ router.post('/create-dataset', verifyToken, upload.array('trainingFiles', 10), a
             }
           );
         });
+      }
+    );
+  } catch (error) {
+    console.error('Training dataset creation error:', error);
+    res.status(500).json({ error: 'Failed to create training dataset' });
+  }
+});
+
+// Create training dataset from URLs
+router.post('/create-dataset-from-urls', verifyToken, async (req, res) => {
+  try {
+    const { datasetName, description, urls, followLinks = false, maxLinks = 5, maxDepth = 1 } = req.body;
+    
+    if (!datasetName) {
+      return res.status(400).json({ error: 'Dataset name is required' });
+    }
+
+    if (!urls || !Array.isArray(urls) || urls.length === 0) {
+      return res.status(400).json({ error: 'At least one URL is required' });
+    }
+
+    // Validate URLs
+    const invalidUrls = urls.filter(url => !isValidUrl(url));
+    if (invalidUrls.length > 0) {
+      return res.status(400).json({ 
+        error: `Invalid URLs: ${invalidUrls.join(', ')}` 
+      });
+    }
+
+    // Limit URLs to prevent abuse
+    if (urls.length > 20) {
+      return res.status(400).json({ error: 'Maximum 20 URLs allowed per dataset' });
+    }
+
+    // Create dataset record
+    db.run(
+      `INSERT INTO training_datasets (user_id, name, description, status, created_at) 
+       VALUES (?, ?, ?, 'processing', CURRENT_TIMESTAMP)`,
+      [req.userId, datasetName, description],
+      async function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to create dataset' });
+        }
+
+        const datasetId = this.lastID;
+
+        try {
+          // Scrape URLs
+          const scrapeOptions = {
+            followLinks: followLinks === true || followLinks === 'true',
+            maxLinksPerPage: parseInt(maxLinks) || 5,
+            maxDepth: parseInt(maxDepth) || 1,
+            concurrency: 3
+          };
+
+          const scrapedData = await scrapeUrls(urls, scrapeOptions);
+          
+          let processedUrls = 0;
+          const totalUrls = scrapedData.length;
+          let hasErrors = false;
+
+          if (totalUrls === 0) {
+            db.run(
+              'UPDATE training_datasets SET status = ? WHERE id = ?',
+              ['error', datasetId]
+            );
+            return res.status(400).json({ error: 'No content could be scraped from the provided URLs' });
+          }
+
+          // Store scraped content
+          scrapedData.forEach((data, index) => {
+            if (data.error) {
+              hasErrors = true;
+              processedUrls++;
+              if (processedUrls === totalUrls) {
+                updateDatasetStatus(datasetId, processedUrls, totalUrls, hasErrors);
+              }
+              return;
+            }
+
+            const content = data.content || '';
+            const title = data.title || data.url;
+            const contentSize = Buffer.byteLength(content, 'utf8');
+
+            if (content.length === 0) {
+              processedUrls++;
+              if (processedUrls === totalUrls) {
+                updateDatasetStatus(datasetId, processedUrls, totalUrls, hasErrors);
+              }
+              return;
+            }
+
+            db.run(
+              `INSERT INTO training_data (dataset_id, filename, file_type, content, file_size, source_url, source_type, created_at) 
+               VALUES (?, ?, ?, ?, ?, ?, 'url', CURRENT_TIMESTAMP)`,
+              [datasetId, title, '.html', content, contentSize, data.url],
+              function(err) {
+                if (err) {
+                  console.error('Error storing scraped data:', err);
+                  hasErrors = true;
+                }
+
+                processedUrls++;
+                
+                // Check if all URLs processed
+                if (processedUrls === totalUrls) {
+                  updateDatasetStatus(datasetId, processedUrls, totalUrls, hasErrors);
+                }
+              }
+            );
+          });
+
+          function updateDatasetStatus(datasetId, processed, total, errors) {
+            const status = errors && processed === 0 ? 'error' : 'ready';
+            db.run(
+              'UPDATE training_datasets SET status = ? WHERE id = ?',
+              [status, datasetId]
+            );
+
+            res.json({
+              datasetId: datasetId,
+              message: `Training dataset created successfully. Processed ${processed} of ${total} URLs.`,
+              urlsProcessed: processed,
+              totalUrls: total,
+              hasErrors: errors
+            });
+          }
+
+        } catch (scrapeError) {
+          console.error('URL scraping error:', scrapeError);
+          db.run(
+            'UPDATE training_datasets SET status = ? WHERE id = ?',
+            ['error', datasetId]
+          );
+          res.status(500).json({ 
+            error: `Failed to scrape URLs: ${scrapeError.message}` 
+          });
+        }
       }
     );
   } catch (error) {
