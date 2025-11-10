@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { Upload, Brain, Trash2, Play, FileText, Clock, CheckCircle } from 'lucide-react';
+import { Upload, Brain, Trash2, Play, FileText, Clock, CheckCircle, Link, Plus } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
+import { trainingService } from '../services/api';
 
 const Container = styled.div`
   padding: 2rem;
@@ -217,6 +218,62 @@ const ErrorMessage = styled.div`
   text-align: center;
 `;
 
+const Tabs = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #e1e5e9;
+`;
+
+const Tab = styled.button`
+  background: none;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+  color: ${props => props.active ? '#007bff' : '#666'};
+  border-bottom: 2px solid ${props => props.active ? '#007bff' : 'transparent'};
+  margin-bottom: -2px;
+  transition: all 0.3s;
+
+  &:hover {
+    color: #007bff;
+  }
+`;
+
+const UrlInputContainer = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  align-items: center;
+`;
+
+const UrlList = styled.div`
+  margin-top: 1rem;
+`;
+
+const UrlItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 5px;
+  margin-bottom: 0.5rem;
+`;
+
+const CheckboxGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+`;
+
+const Checkbox = styled.input`
+  width: auto;
+  margin-right: 0.5rem;
+`;
+
 function ModelTraining() {
   const [datasets, setDatasets] = useState([]);
   const [models, setModels] = useState([]);
@@ -229,6 +286,12 @@ function ModelTraining() {
   });
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [inputMode, setInputMode] = useState('files'); // 'files' or 'urls'
+  const [urls, setUrls] = useState(['']);
+  const [urlInput, setUrlInput] = useState('');
+  const [followLinks, setFollowLinks] = useState(false);
+  const [maxLinks, setMaxLinks] = useState(5);
+  const [maxDepth, setMaxDepth] = useState(1);
 
   useEffect(() => {
     fetchDatasets();
@@ -269,37 +332,101 @@ function ModelTraining() {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const addUrl = () => {
+    if (urlInput.trim()) {
+      setUrls([...urls, urlInput.trim()]);
+      setUrlInput('');
+    }
+  };
+
+  const removeUrl = (index) => {
+    setUrls(urls.filter((_, i) => i !== index));
+  };
+
+  const handleUrlKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addUrl();
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.datasetName || uploadedFiles.length === 0) {
-      setError('Dataset name and at least one file are required');
-      return;
+    
+    if (inputMode === 'files') {
+      if (!formData.datasetName || uploadedFiles.length === 0) {
+        setError('Dataset name and at least one file are required');
+        return;
+      }
+
+      setUploading(true);
+      setError('');
+
+      try {
+        const formDataToSend = new FormData();
+        formDataToSend.append('datasetName', formData.datasetName);
+        formDataToSend.append('description', formData.description);
+        
+        uploadedFiles.forEach(fileObj => {
+          formDataToSend.append('trainingFiles', fileObj.file);
+        });
+
+        const response = await axios.post('/api/training/create-dataset', formDataToSend, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        setFormData({ datasetName: '', description: '' });
+        setUploadedFiles([]);
+        setShowCreateForm(false);
+        fetchDatasets();
+      } catch (error) {
+        setError(error.response?.data?.error || 'Failed to create dataset');
+      } finally {
+        setUploading(false);
+      }
+    } else {
+      // URL mode
+      const validUrls = urls.filter(url => url.trim() && isValidUrl(url.trim()));
+      if (!formData.datasetName || validUrls.length === 0) {
+        setError('Dataset name and at least one valid URL are required');
+        return;
+      }
+
+      setUploading(true);
+      setError('');
+
+      try {
+        const response = await trainingService.createDatasetFromUrls({
+          datasetName: formData.datasetName,
+          description: formData.description,
+          urls: validUrls,
+          followLinks: followLinks,
+          maxLinks: parseInt(maxLinks) || 5,
+          maxDepth: parseInt(maxDepth) || 1
+        });
+
+        setFormData({ datasetName: '', description: '' });
+        setUrls(['']);
+        setUrlInput('');
+        setFollowLinks(false);
+        setMaxLinks(5);
+        setMaxDepth(1);
+        setShowCreateForm(false);
+        fetchDatasets();
+      } catch (error) {
+        setError(error.response?.data?.error || 'Failed to create dataset from URLs');
+      } finally {
+        setUploading(false);
+      }
     }
+  };
 
-    setUploading(true);
-    setError('');
-
+  const isValidUrl = (string) => {
     try {
-      const formDataToSend = new FormData();
-      formDataToSend.append('datasetName', formData.datasetName);
-      formDataToSend.append('description', formData.description);
-      
-      uploadedFiles.forEach(fileObj => {
-        formDataToSend.append('trainingFiles', fileObj.file);
-      });
-
-      const response = await axios.post('/api/training/create-dataset', formDataToSend, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-
-      setFormData({ datasetName: '', description: '' });
-      setUploadedFiles([]);
-      setShowCreateForm(false);
-      fetchDatasets();
-    } catch (error) {
-      setError(error.response?.data?.error || 'Failed to create dataset');
-    } finally {
-      setUploading(false);
+      new URL(string);
+      return true;
+    } catch (_) {
+      return false;
     }
   };
 
@@ -416,52 +543,164 @@ function ModelTraining() {
             </FormGroup>
 
             <FormGroup>
-              <Label>Training Files</Label>
-              <UploadArea {...getRootProps()} isDragActive={isDragActive}>
-                <input {...getInputProps()} />
-                <UploadText>
-                  {isDragActive
-                    ? 'Drop the files here...'
-                    : 'Drag & drop training files here, or click to select'
-                  }
-                </UploadText>
-                <UploadButton type="button">
-                  <Upload size={20} />
-                  Select Files
-                </UploadButton>
-                <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>
-                  Supported: TXT, MD, JSON, CSV (Max 50MB each)
-                </div>
-              </UploadArea>
+              <Label>Data Source</Label>
+              <Tabs>
+                <Tab 
+                  type="button"
+                  active={inputMode === 'files'} 
+                  onClick={() => setInputMode('files')}
+                >
+                  <FileText size={16} style={{ marginRight: '0.5rem', display: 'inline' }} />
+                  Upload Files
+                </Tab>
+                <Tab 
+                  type="button"
+                  active={inputMode === 'urls'} 
+                  onClick={() => setInputMode('urls')}
+                >
+                  <Link size={16} style={{ marginRight: '0.5rem', display: 'inline' }} />
+                  Website URLs
+                </Tab>
+              </Tabs>
 
-              {uploadedFiles.length > 0 && (
-                <div style={{ marginTop: '1rem' }}>
-                  <h4>Selected Files:</h4>
-                  {uploadedFiles.map((fileObj, index) => (
-                    <div key={index} style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center',
-                      padding: '0.5rem',
-                      background: '#f8f9fa',
-                      borderRadius: '5px',
-                      marginBottom: '0.5rem'
-                    }}>
-                      <div>
-                        <FileText size={16} style={{ marginRight: '0.5rem' }} />
-                        {fileObj.name} ({formatFileSize(fileObj.size)})
-                      </div>
-                      <Button 
-                        type="button" 
-                        variant="danger" 
-                        onClick={() => removeFile(index)}
-                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
+              {inputMode === 'files' ? (
+                <>
+                  <UploadArea {...getRootProps()} isDragActive={isDragActive}>
+                    <input {...getInputProps()} />
+                    <UploadText>
+                      {isDragActive
+                        ? 'Drop the files here...'
+                        : 'Drag & drop training files here, or click to select'
+                      }
+                    </UploadText>
+                    <UploadButton type="button">
+                      <Upload size={20} />
+                      Select Files
+                    </UploadButton>
+                    <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>
+                      Supported: TXT, MD, JSON, CSV (Max 50MB each)
                     </div>
-                  ))}
-                </div>
+                  </UploadArea>
+
+                  {uploadedFiles.length > 0 && (
+                    <div style={{ marginTop: '1rem' }}>
+                      <h4>Selected Files:</h4>
+                      {uploadedFiles.map((fileObj, index) => (
+                        <div key={index} style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          padding: '0.5rem',
+                          background: '#f8f9fa',
+                          borderRadius: '5px',
+                          marginBottom: '0.5rem'
+                        }}>
+                          <div>
+                            <FileText size={16} style={{ marginRight: '0.5rem' }} />
+                            {fileObj.name} ({formatFileSize(fileObj.size)})
+                          </div>
+                          <Button 
+                            type="button" 
+                            variant="danger" 
+                            onClick={() => removeFile(index)}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <UrlInputContainer>
+                    <Input
+                      type="url"
+                      value={urlInput}
+                      onChange={(e) => setUrlInput(e.target.value)}
+                      onKeyPress={handleUrlKeyPress}
+                      placeholder="Enter website URL (e.g., https://example.com)"
+                      style={{ flex: 1 }}
+                    />
+                    <Button type="button" onClick={addUrl}>
+                      <Plus size={16} />
+                      Add URL
+                    </Button>
+                  </UrlInputContainer>
+
+                  {urls.filter(url => url.trim()).length > 0 && (
+                    <UrlList>
+                      <h4>URLs to Scrape:</h4>
+                      {urls.map((url, index) => (
+                        url.trim() && (
+                          <UrlItem key={index}>
+                            <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                              <Link size={16} style={{ marginRight: '0.5rem', color: '#007bff' }} />
+                              <span style={{ 
+                                color: isValidUrl(url.trim()) ? '#333' : '#dc3545',
+                                wordBreak: 'break-all'
+                              }}>
+                                {url.trim()}
+                              </span>
+                            </div>
+                            <Button 
+                              type="button" 
+                              variant="danger" 
+                              onClick={() => removeUrl(index)}
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </UrlItem>
+                        )
+                      ))}
+                    </UrlList>
+                  )}
+
+                  <CheckboxGroup>
+                    <Checkbox
+                      type="checkbox"
+                      id="followLinks"
+                      checked={followLinks}
+                      onChange={(e) => setFollowLinks(e.target.checked)}
+                    />
+                    <Label htmlFor="followLinks" style={{ marginBottom: 0, fontWeight: 'normal' }}>
+                      Follow links on pages (scrape linked pages)
+                    </Label>
+                  </CheckboxGroup>
+
+                  {followLinks && (
+                    <>
+                      <FormGroup style={{ marginTop: '1rem' }}>
+                        <Label>Max Links per Page</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={maxLinks}
+                          onChange={(e) => setMaxLinks(e.target.value)}
+                          placeholder="5"
+                        />
+                      </FormGroup>
+                      <FormGroup>
+                        <Label>Max Depth (link following depth)</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="3"
+                          value={maxDepth}
+                          onChange={(e) => setMaxDepth(e.target.value)}
+                          placeholder="1"
+                        />
+                      </FormGroup>
+                    </>
+                  )}
+
+                  <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>
+                    Enter one or more website URLs. The system will scrape the content from these pages for training.
+                  </div>
+                </>
               )}
             </FormGroup>
 
@@ -469,7 +708,12 @@ function ModelTraining() {
               <Button type="submit" disabled={uploading}>
                 {uploading ? 'Creating...' : 'Create Dataset'}
               </Button>
-              <Button type="button" onClick={() => setShowCreateForm(false)}>
+              <Button type="button" onClick={() => {
+                setShowCreateForm(false);
+                setInputMode('files');
+                setUrls(['']);
+                setUrlInput('');
+              }}>
                 Cancel
               </Button>
             </div>
