@@ -64,6 +64,7 @@ export const trainingService = {
   createDataset: (formData) => api.post('/api/training/create-dataset', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
+  createDatasetFromUrls: (data) => api.post('/api/training/create-dataset-from-urls', data),
   getDatasets: () => api.get('/api/training/datasets'),
   getDataset: (datasetId) => api.get(`/api/training/datasets/${datasetId}`),
   deleteDataset: (datasetId) => api.delete(`/api/training/datasets/${datasetId}`),
