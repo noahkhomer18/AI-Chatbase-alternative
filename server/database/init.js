@@ -98,10 +98,20 @@ const initDatabase = () => {
           file_type TEXT NOT NULL,
           content TEXT NOT NULL,
           file_size INTEGER NOT NULL,
+          source_url TEXT,
+          source_type TEXT DEFAULT 'file',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (dataset_id) REFERENCES training_datasets (id)
         )
       `);
+      
+      // Add source_url and source_type columns if they don't exist (for existing databases)
+      db.run(`
+        ALTER TABLE training_data ADD COLUMN source_url TEXT
+      `, () => {});
+      db.run(`
+        ALTER TABLE training_data ADD COLUMN source_type TEXT DEFAULT 'file'
+      `, () => {});
 
       // Trained models table
       db.run(`
